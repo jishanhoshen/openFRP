@@ -17,3 +17,5 @@ agent.yaml
 *.crt
 *.csr
 *.srl
+node_modules/
+/web/node_modules/

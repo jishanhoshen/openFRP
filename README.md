@@ -31,7 +31,7 @@ Only the **relay** needs port forwarding on its network. Your PC does not.
 - **TCP and UDP tunnels**, with automatic public ports.
 - **Live changes.** Add, disable or remove a tunnel and the agent applies it without a restart.
 - **Instant revocation.** Remove a device and it disconnects at once.
-- **Dashboard** for devices, tunnels, traffic and account management, plus an admin area.
+- **Dashboard** (React, shadcn/ui-style components, Tailwind) for computers, tunnels, traffic, account management and an admin area.
 - **Reserved ports** for servers that need a fixed port, such as Minecraft on 25565.
 - **Port cooldown.** A released port is kept from other users for a while.
 - **Quotas** for devices and tunnels per user.
@@ -107,11 +107,15 @@ The dashboard shows the public address, for example `relay-ip:20000`. Give this 
 Everything is built and tested inside Docker. Nothing is installed on your host.
 
 ```bash
+make web      # build the React dashboard into internal/web/static (node in Docker)
 make vet      # static checks
 make test     # unit and database tests
 make e2e      # full end-to-end test on an isolated Docker network
 make agents   # agent binaries for Linux (amd64, arm64) and Windows
 ```
+
+The built dashboard is committed under `internal/web/static/`, so `go build` works
+without Node. Run `make web` after changing anything under `web/`.
 
 ## Security notes
 

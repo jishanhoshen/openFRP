@@ -7,7 +7,7 @@ DOCKER_GO = docker run --rm -u $(shell id -u):$(shell id -g) \
 	-e HOME=/tmp -e GOCACHE=/src/.cache/go-build -e GOMODCACHE=/src/.cache/gomod \
 	-v $(CURDIR):/src -w /src $(1) $(GO_IMAGE)
 
-.PHONY: tidy fmt vet test agents images e2e clean
+.PHONY: tidy fmt vet test agents images e2e web clean
 
 tidy:   ## resolve dependencies, write go.sum
 	$(call DOCKER_GO) go mod tidy
@@ -31,6 +31,10 @@ images: ## build the control-plane image
 
 e2e:    ## full relay+agent test on an isolated docker network
 	test/e2e/run.sh
+
+web:    ## build the React dashboard into internal/web/static (node runs in Docker)
+	docker run --rm -u $(shell id -u):$(shell id -g) -e HOME=/tmp -e npm_config_cache=/tmp/npm \
+		-v $(CURDIR):/src -w /src/web node:22-alpine sh -c "npm ci --no-audit --no-fund && npm run build"
 
 clean:
 	rm -rf dist .cache
