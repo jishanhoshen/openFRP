@@ -1,0 +1,83 @@
+# End-to-end test of the Phase 3 stack on an isolated internal Docker network
+# (no internet, nothing published to the host):
+#   postgres + control plane + relay (frps) + agent + echo "game server"
+#   + scenario driver (acts as account owner and as an external player).
+#
+# Run with: make e2e   (or test/e2e/run.sh)
+
+name: tunnelhub-e2e
+
+networks:
+  e2e:
+    internal: true
+
+volumes:
+  agentdata: {}
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: tunnelhub
+      POSTGRES_PASSWORD: e2e-db-password
+      POSTGRES_DB: tunnelhub
+    tmpfs: [/var/lib/postgresql/data]
+    networks: [e2e]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "tunnelhub", "-d", "tunnelhub"]
+      interval: 1s
+      retries: 60
+
+  control:
+    build: { context: ../.., target: control }
+    command: [serve]
+    environment:
+      TH_DATABASE_URL: postgres://tunnelhub:e2e-db-password@postgres:5432/tunnelhub?sslmode=disable
+      TH_API_LISTEN: 0.0.0.0:8080
+      TH_PLUGIN_LISTEN: 0.0.0.0:8081 # e2e only: frps runs in its own container here
+      TH_PORT_POOL: 20000-20010
+      TH_OPEN_REGISTRATION: "true"
+      TH_SECURE_COOKIES: "false" # plain HTTP inside the test network
+      TH_PUBLIC_URL: http://control:8080
+      TH_RELAY_ADDR: frps
+      TH_RELAY_PROTOCOL: quic
+      TH_RELAY_TOKEN_FILE: /etc/tunnelhub/relay-token
+      TH_FRPS_ADMIN_URL: http://frps:7500
+      TH_FRPS_ADMIN_PASSWORD: e2e-frps-admin
+      TH_STATS_INTERVAL: 3s
+      TH_PUBLIC_HOST: frps
+    volumes: [./control:/etc/tunnelhub:ro]
+    networks: [e2e]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  frps:
+    image: fatedier/frps:v0.71.1
+    command: ["-c", "/etc/frp/frps.toml"]
+    volumes: [./frps.toml:/etc/frp/frps.toml:ro]
+    networks: [e2e]
+    depends_on: [control]
+
+  # Stand-in game server on the "home PC".
+  echo:
+    image: tunnelhub/e2e:test
+    build: { context: ../.., target: e2e }
+    command: [echo, -tcp=127.0.0.1:7777, -udp=127.0.0.1:7778]
+    networks: [e2e]
+
+  # The agent starts with NO config: it pairs via the API, then connects.
+  # It shares the echo container's network namespace (127.0.0.1 = home PC).
+  agent:
+    image: tunnelhub/e2e:test
+    entrypoint: [/usr/local/bin/tunnelhub-agent]
+    command: [run, -config=/data/agent.yaml, -api=http://control:8080]
+    network_mode: service:echo
+    volumes: [agentdata:/data]
+    depends_on: [frps, echo]
+
+  scenario:
+    image: tunnelhub/e2e:test
+    command: [scenario, -api=http://control:8080, -relay=frps, -agent-config=/data/agent.yaml]
+    volumes: [agentdata:/data]
+    networks: [e2e]
+    depends_on: [agent]

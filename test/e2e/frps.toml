@@ -1,0 +1,23 @@
+# frps config for the e2e test only (test secrets, auto-generated TLS cert).
+bindAddr = "0.0.0.0"
+bindPort = 7000
+quicBindPort = 7000
+transport.tls.force = true
+transport.heartbeatTimeout = 60   # same as production; agents ping every 15s
+auth.method = "token"
+auth.token = "e2e-relay-token"
+allowPorts = [{ start = 20000, end = 20010 }]
+detailedErrorsToClient = true
+webServer.addr = "0.0.0.0"
+webServer.port = 7500
+webServer.user = "admin"
+webServer.password = "e2e-frps-admin"
+log.to = "console"
+log.level = "info"
+log.disablePrintColor = true
+
+[[httpPlugins]]
+name = "tunnelhub-control"
+addr = "control:8081"
+path = "/frps/plugin"
+ops = ["Login", "NewProxy", "CloseProxy", "Ping"]
