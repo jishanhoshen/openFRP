@@ -1,0 +1,5 @@
+.cache
+dist
+deploy/.env
+deploy/secrets
+deploy/tls

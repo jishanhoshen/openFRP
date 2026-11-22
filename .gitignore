@@ -1,0 +1,19 @@
+/dist/
+/.cache/
+
+# Relay secrets and generated material — never commit
+/deploy/.env
+/deploy/secrets/
+/deploy/tls/
+
+# Real agent configs contain device tokens
+agent.yaml
+
+# Backups and any stray key/certificate material
+/deploy/backups/
+*.bak
+*.key
+*.pem
+*.crt
+*.csr
+*.srl
