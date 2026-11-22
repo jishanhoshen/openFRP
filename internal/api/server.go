@@ -138,6 +138,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/v1/devices/{id}/tunnels/{tid}", s.user(s.updateTunnel))
 	mux.HandleFunc("DELETE /api/v1/devices/{id}/tunnels/{tid}", s.user(s.deleteTunnel))
 	mux.HandleFunc("GET /api/v1/devices/{id}/tunnels/{tid}/traffic", s.user(s.tunnelTraffic))
+	mux.HandleFunc("GET /api/v1/me/summary", s.user(s.mySummary))
 	mux.HandleFunc("GET /api/v1/reserved-ports", s.user(s.myReservedPorts))
 	mux.HandleFunc("GET /api/v1/audit", s.user(s.myAudit))
 

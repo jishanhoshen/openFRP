@@ -6,6 +6,7 @@ import { Shell } from "@/components/shell";
 import { EmptyState } from "@/components/common";
 import { LoginPage } from "@/pages/login";
 import { DevicesPage } from "@/pages/devices";
+import { OverviewPage } from "@/pages/overview";
 import { DevicePage } from "@/pages/device";
 import { TunnelPage } from "@/pages/tunnel";
 import { AccountPage } from "@/pages/account";
@@ -21,7 +22,7 @@ function Router() {
   // Public pages
   if (first === "login" || (first === "register" && info?.open_registration)) {
     if (me) {
-      go("#/devices");
+      go("#/");
       return null;
     }
     return <LoginPage register={first === "register"} />;
@@ -35,8 +36,10 @@ function Router() {
   let page: ReactNode;
   switch (first) {
     case "":
+      page = <OverviewPage />;
+      break;
     case "devices":
-      if (!second) page = <DevicesPage />;
+      if (!second) page = <DevicesPage openLink={route.query.get("new") === "1"} />;
       else if (third === "tunnels" && fourth) page = <TunnelPage deviceId={second} tunnelId={fourth} />;
       else page = <DevicePage id={second} />;
       break;

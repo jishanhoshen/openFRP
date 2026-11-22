@@ -1049,3 +1049,22 @@ func (s *Store) Overview(ctx context.Context, pool PortPool) (Overview, error) {
 
 // Ping checks database connectivity (readiness probe).
 func (s *Store) Ping(ctx context.Context) error { return s.db.Ping(ctx) }
+
+// UserTrafficDaily returns a user's total traffic per day over the last `days`
+// days (UTC), summed across all of their tunnels. Days with no traffic are
+// omitted; callers fill the gaps.
+func (s *Store) UserTrafficDaily(ctx context.Context, userID int64, days int) ([]TrafficDay, error) {
+	rows, err := s.db.Query(ctx, `SELECT to_char(t.day, 'YYYY-MM-DD'), sum(t.bytes_in)::bigint, sum(t.bytes_out)::bigint
+		FROM traffic_daily t
+		JOIN allocations a ON a.id = t.allocation_id
+		JOIN devices d ON d.id = a.device_id
+		WHERE d.user_id = $1 AND t.day > (now() AT TIME ZONE 'UTC')::date - $2::int
+		GROUP BY t.day ORDER BY t.day`, userID, days)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (TrafficDay, error) {
+		var d TrafficDay
+		return d, r.Scan(&d.Day, &d.BytesIn, &d.BytesOut)
+	})
+}

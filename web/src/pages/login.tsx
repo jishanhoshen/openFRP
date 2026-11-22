@@ -25,7 +25,7 @@ export function LoginPage({ register }: { register: boolean }) {
       if (register) await api("POST", "/auth/register", { email, password });
       await api<Me>("POST", "/auth/login", { email, password });
       await refresh();
-      go("#/devices");
+      go("#/");
     } catch (err) {
       setError(errorText(err));
     } finally {

@@ -12,9 +12,9 @@ import { ago } from "@/lib/format";
 import { go } from "@/lib/router";
 import type { Device } from "@/lib/types";
 
-export function DevicesPage({ initialCode }: { initialCode?: string }) {
+export function DevicesPage({ initialCode, openLink }: { initialCode?: string; openLink?: boolean }) {
   const { data, error, loading, reload } = useApi<Device[]>("/devices", 15000);
-  const [linkOpen, setLinkOpen] = useState(Boolean(initialCode));
+  const [linkOpen, setLinkOpen] = useState(Boolean(initialCode) || Boolean(openLink));
 
   return (
     <>

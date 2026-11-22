@@ -54,6 +54,7 @@ export interface Tunnel {
   proxy_protocol: string;
   created_at: string;
   public_address: string;
+  device_name?: string;
   live?: Live;
 }
 
@@ -111,4 +112,14 @@ export interface Overview {
   last30_bytes_in: number;
   last30_bytes_out: number;
   top_tunnels_30d: { tunnel_id: number; device_id: string; name: string; owner: string; bytes_in: number; bytes_out: number }[];
+}
+
+export interface Summary {
+  computers: number;
+  computers_online: number;
+  tunnels: number;
+  tunnels_live: number;
+  traffic_30_days: TrafficDay[];
+  traffic_30_in: number;
+  traffic_30_out: number;
 }

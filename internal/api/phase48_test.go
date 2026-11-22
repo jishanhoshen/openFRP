@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"tunnelhub/internal/api"
+	"tunnelhub/internal/store"
 	"tunnelhub/internal/web"
 )
 
@@ -157,5 +159,28 @@ func TestDashboardAndHeaders(t *testing.T) {
 	}
 	if st, _ := c.do("POST", "/", nil); st != 405 {
 		t.Fatalf("POST / = %d, want 405", st)
+	}
+}
+
+// The overview summary counts the user's computers and tunnels and sums traffic.
+func TestUserSummary(t *testing.T) {
+	e := setup(t, nil)
+	owner := e.user("summary@example.test")
+	devID, _ := e.pairDevice(owner, "pc")
+	owner.must(201, "POST", "/api/v1/devices/"+devID+"/tunnels", map[string]any{"name": "mc", "type": "tcp", "local_port": 25565})
+	if err := e.store.AddTraffic(context.Background(), []store.TrafficDelta{
+		{ProxyName: devID + ".mc", DeviceID: devID, Name: "mc", In: 1000, Out: 2500, CurIn: 1000, CurOut: 2500},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	s := owner.must(200, "GET", "/api/v1/me/summary", nil)
+	if s["computers"].(float64) != 1 || s["tunnels"].(float64) != 1 {
+		t.Fatalf("counts = %v", s)
+	}
+	if s["traffic_30_in"].(float64) != 1000 || s["traffic_30_out"].(float64) != 2500 {
+		t.Fatalf("traffic = %v", s)
+	}
+	if len(s["traffic_30_days"].([]any)) != 1 {
+		t.Fatalf("series = %v", s["traffic_30_days"])
 	}
 }
