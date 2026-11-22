@@ -1,0 +1,45 @@
+# TunnelHub agent config — normally you do NOT write this by hand:
+#
+#   tunnelhub-agent run -api https://tunnels.example.com
+#
+# shows a pairing code, waits for you to claim it in your account, then writes
+# this file (mode 0600) with the device credentials and relay settings.
+#   Linux:   /etc/tunnelhub/agent.yaml
+#   Windows: C:\ProgramData\TunnelHub\agent.yaml
+# Tunnels are managed in the dashboard: when control.url is set, the agent
+# receives its tunnel list from the control plane and applies changes live.
+# The tunnels: list in this file is only a cache for starting while the
+# control plane is unreachable; local edits to it are overwritten by the sync.
+
+control:
+  url: https://tunnels.example.com
+
+server:
+  addr: relay.example.com
+  port: 7000
+  protocol: quic                       # quic (recommended) | tcp (if outbound UDP is blocked)
+  token: FILLED_IN_BY_PAIRING
+  caFile: /etc/tunnelhub/relay-ca.crt  # written by pairing; pins the relay certificate
+  serverName: relay.example.com
+
+device:
+  id: dev-xxxxxxxxxxxxxxxx
+  token: FILLED_IN_BY_PAIRING
+
+log:
+  level: info
+  to: console
+
+tunnels:
+  # name / type / remotePort must match a tunnel created via the API:
+  #   POST /api/v1/devices/{id}/tunnels {"name":"minecraft","type":"tcp","local_port":25565}
+  - name: minecraft
+    type: tcp
+    localIP: 127.0.0.1                 # loopback/private IPs only
+    localPort: 25565
+    remotePort: 20000
+    # proxyProtocol: v2                # only if the server supports PROXY protocol (Velocity/Paper)
+  - name: bedrock
+    type: udp
+    localPort: 19132
+    remotePort: 20000

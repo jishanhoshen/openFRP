@@ -1,0 +1,62 @@
+# TunnelHub relay — frps v0.71.1
+# Rendered by frp's template engine: {{ .Envs.NAME }} reads environment variables
+# (set in deploy/.env and passed through compose.yaml).
+
+bindAddr = "0.0.0.0"
+bindPort = 7000          # TCP: agent control connections
+quicBindPort = 7000      # UDP: QUIC transport for agents (better for UDP games)
+proxyBindAddr = "0.0.0.0"
+
+# --- Agent <-> relay security -------------------------------------------------
+transport.tls.force = true
+transport.tls.certFile = "/etc/frp/tls/server.crt"   # created by deploy/scripts/gen-certs.sh
+transport.tls.keyFile = "/etc/frp/tls/server.key"
+transport.maxPoolCount = 5
+# Agents send a heartbeat every 15s; each one is re-authorised by the control
+# plane (Ping plugin op). A client that stops sending valid heartbeats (e.g. a
+# revoked device running a modified agent) is disconnected after this timeout.
+transport.heartbeatTimeout = 60
+
+# Relay-wide token (defence in depth). The real credential is the per-device
+# token, checked by the control-plane plugin below.
+auth.method = "token"
+auth.tokenSource.type = "file"
+auth.tokenSource.file.path = "/run/secrets/frps_token"
+
+# Don't leak internal error details to clients.
+detailedErrorsToClient = false
+
+# --- Public port pool --------------------------------------------------------
+# Extra (reserved/premium) ports outside the pool go here too, e.g.:
+#   allowPorts = [ {start = 20000, end = 29999}, {single = 25565} ]
+# and must match TH_EXTRA_PORTS on the control plane.
+# Must match the control plane's -pool flag (both read TUNNEL_PORT_START/END).
+# Stays below the kernel ephemeral range (32768-60999).
+allowPorts = [
+  { start = {{ .Envs.TUNNEL_PORT_START }}, end = {{ .Envs.TUNNEL_PORT_END }} },
+]
+maxPortsPerClient = {{ .Envs.MAX_PORTS_PER_DEVICE }}
+userConnTimeout = 10
+udpPacketSize = 1500
+
+# --- Admin / stats API ------------------------------------------------------------
+# Bound to the edge Docker bridge gateway (10.250.0.1) so only the control plane
+# container can reach it. Never open 7500 in the firewall.
+webServer.addr = "10.250.0.1"
+webServer.port = 7500
+webServer.user = "admin"
+webServer.password = "{{ .Envs.FRPS_ADMIN_PASSWORD }}"
+enablePrometheus = true
+
+log.to = "console"
+log.level = "info"
+log.disablePrintColor = true
+
+# --- Control-plane enforcement -----------------------------------------------
+# Login: device token check.  NewProxy: tunnel must match an allocation.
+# Ping: revoked devices are disconnected within one heartbeat.
+[[httpPlugins]]
+name = "tunnelhub-control"
+addr = "127.0.0.1:8081"
+path = "/frps/plugin"
+ops = ["Login", "NewProxy", "CloseProxy", "Ping"]

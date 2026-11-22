@@ -1,0 +1,131 @@
+# TunnelHub relay — Phase 3 stack.
+#   caddy     HTTPS for the API (Let's Encrypt), the only public HTTP entry point
+#   control   management API (:8080, via caddy) + frps plugin (127.0.0.1:8081)
+#   postgres  users, devices, allocations, audit log
+#   frps      tunnel data plane (host network)
+# Later phases add: dashboard, prometheus/grafana, backups.
+#
+# NOT YET DEPLOYED. See README "Relay setup" for the one-time preparation
+# (.env, secrets/, tls/, firewall) before `docker compose up -d`.
+
+name: tunnelhub
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "5" }
+
+networks:
+  edge: # caddy <-> control
+    ipam:
+      config: [{ subnet: 10.250.0.0/24 }]
+  db: # control <-> postgres; no internet access
+    internal: true
+
+volumes:
+  pg_data: {}
+  caddy_data: {}
+  caddy_config: {}
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      TH_DOMAIN: ${TH_DOMAIN:?set TH_DOMAIN in .env}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [edge]
+    depends_on: [control]
+    logging: *logging
+
+  control:
+    build:
+      context: ..
+      target: control
+    image: tunnelhub/control:${TUNNELHUB_VERSION:-dev}
+    restart: unless-stopped
+    command: [serve]
+    environment:
+      TH_DATABASE_URL: postgres://tunnelhub@postgres:5432/tunnelhub?sslmode=disable
+      TH_DATABASE_PASSWORD_FILE: /run/secrets/db_password
+      TH_API_LISTEN: 0.0.0.0:8080
+      TH_PLUGIN_LISTEN: 0.0.0.0:8081 # published on host loopback only (below)
+      TH_PORT_POOL: ${TUNNEL_PORT_START:?}-${TUNNEL_PORT_END:?}
+      TH_MAX_TUNNELS_PER_DEVICE: ${MAX_PORTS_PER_DEVICE:-20}
+      TH_MAX_DEVICES_PER_USER: ${MAX_DEVICES_PER_USER:-10}
+      TH_OPEN_REGISTRATION: ${OPEN_REGISTRATION:-false}
+      TH_PUBLIC_URL: https://${TH_DOMAIN}
+      TH_TRUSTED_PROXIES: 10.250.0.0/24 # caddy's network; it sets X-Forwarded-For
+      TH_RELAY_ADDR: ${RELAY_ADDR:?set RELAY_ADDR in .env}
+      TH_RELAY_PORT: "7000"
+      TH_RELAY_PROTOCOL: quic
+      TH_RELAY_TOKEN_FILE: /run/secrets/frps_token
+      TH_RELAY_CA_FILE: /etc/tunnelhub/tls/ca.crt
+      TH_RELAY_SERVER_NAME: ${RELAY_ADDR}
+      TH_PUBLIC_HOST: ${RELAY_ADDR}
+      TH_EXTRA_PORTS: ${EXTRA_PORTS:-}
+      TH_PORT_COOLDOWN: ${PORT_COOLDOWN:-24h}
+      # frps dashboard API, on the edge bridge gateway (see frps.toml).
+      TH_FRPS_ADMIN_URL: http://10.250.0.1:7500
+      TH_FRPS_ADMIN_USER: admin
+      TH_FRPS_ADMIN_PASSWORD: ${FRPS_ADMIN_PASSWORD:?}
+      TH_STATS_INTERVAL: 30s
+    secrets: [db_password, frps_token]
+    volumes:
+      - ./tls/ca.crt:/etc/tunnelhub/tls/ca.crt:ro
+    # Plugin endpoint for frps (host network) — loopback only, never public.
+    ports: ["127.0.0.1:8081:8081"]
+    networks: [edge, db]
+    depends_on:
+      postgres: { condition: service_healthy }
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tunnelhub
+      POSTGRES_DB: tunnelhub
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets: [db_password]
+    volumes: [pg_data:/var/lib/postgresql/data]
+    networks: [db]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "tunnelhub", "-d", "tunnelhub"]
+      interval: 5s
+      retries: 30
+    shm_size: 128mb
+    logging: *logging
+
+  frps:
+    image: fatedier/frps:v0.71.1
+    # Host networking: no docker-proxy per port across a 10k-port range, no
+    # Docker NAT on the data path, and frps sees real client source IPs.
+    network_mode: host
+    restart: unless-stopped
+    command: ["-c", "/etc/frp/frps.toml"]
+    environment:
+      TUNNEL_PORT_START: ${TUNNEL_PORT_START:?}
+      TUNNEL_PORT_END: ${TUNNEL_PORT_END:?}
+      MAX_PORTS_PER_DEVICE: ${MAX_PORTS_PER_DEVICE:-20}
+      FRPS_ADMIN_PASSWORD: ${FRPS_ADMIN_PASSWORD:?}
+    secrets: [frps_token]
+    volumes:
+      - ./frps/frps.toml:/etc/frp/frps.toml:ro
+      - ./tls:/etc/frp/tls:ro
+    ulimits:
+      nofile: { soft: 1048576, hard: 1048576 }
+    depends_on: [control]
+    logging: *logging
+
+secrets:
+  frps_token:
+    file: ./secrets/frps_token
+  db_password:
+    file: ./secrets/db_password

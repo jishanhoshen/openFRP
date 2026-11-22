@@ -1,0 +1,13 @@
+# HTTPS front for the control plane: API and dashboard (served by control).
+# Certificates via Let's Encrypt (TH_DOMAIN must resolve to this host and
+# ports 80/443 must be open). Security headers are set here and by control.
+{$TH_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	reverse_proxy control:8080
+}

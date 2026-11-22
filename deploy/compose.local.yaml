@@ -1,0 +1,16 @@
+# Local/home-network override. Use with:
+#   docker compose -f compose.yaml -f compose.local.yaml up -d --build
+# Differences from production: no Caddy/HTTPS, web on plain HTTP port 8080,
+# insecure cookies (no Secure flag). Do NOT use this on an internet-facing host
+# where the web UI is reachable from outside your LAN.
+services:
+  caddy:
+    profiles: ["prod"]          # not started locally
+
+  control:
+    ports:
+      - "8080:8080"             # web/API on the LAN: http://<LAN-IP>:8080
+    environment:
+      TH_PUBLIC_URL: http://${LAN_IP:?}:8080
+      TH_SECURE_COOKIES: "false"
+      TH_TRUSTED_PROXIES: ""
